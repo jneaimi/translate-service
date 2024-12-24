@@ -1,15 +1,23 @@
 const express = require('express');
 const axios = require('axios');
+const basicAuth = require('express-basic-auth');
 const app = express();
 app.use(express.json());
 require('dotenv').config();
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+// Basic Authentication using .env for credentials
+app.use(basicAuth({
+    users: {
+        [process.env.BASIC_AUTH_USERNAME]: process.env.BASIC_AUTH_PASSWORD
+    },
+    challenge: true,
+    realm: 'Translation Service'
+}));
 
 app.post('/translate', async (req, res) => {
     const { englishContent } = req.body;
-
 
     const prompt = `
     You are an expert translator specializing in English to Arabic translations. Your task is to provide an accurate and natural-sounding translation while preserving the original meaning and tone of the text.
