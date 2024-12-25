@@ -18,9 +18,12 @@ app.use(basicAuth({
 
 app.post('/translate', async (req, res) => {
     try {
-        // Extract the plain text content from the payload
-        const { payload } = req.body;  // Directus flow payload
-        const englishContent = payload.translations.update[0].content;  // Extract content from the update array
+        // Extract the plain text content from the payload (englishContent should be plain text)
+        const englishContent = req.body.englishContent;  // Get plain text directly from the body
+
+        if (!englishContent) {
+            return res.status(400).json({ error: 'englishContent is required' });
+        }
 
         // Constructing the translation prompt
         const prompt = `
@@ -91,19 +94,19 @@ app.post('/translate', async (req, res) => {
             },
         });
 
-        // Extract the translated content from OpenAI's response
+        // Extract translated content
         const translatedContent = response.data.choices[0].message.content.trim();
-        
-        // Parse the translated content as JSON if necessary
+
+        // Attempt to parse the response content if it's in JSON format, otherwise treat it as a plain string
         let arabicTranslation = {};
         try {
-            arabicTranslation = JSON.parse(translatedContent);
+            arabicTranslation = JSON.parse(translatedContent); // Parse the translation if it's a valid JSON
         } catch (err) {
             console.error('Error parsing translated content:', err);
             arabicTranslation = { arabic_translation: translatedContent, translation_notes: ["No additional notes provided."] };
         }
 
-        // Return the translated content and notes in the requested JSON structure
+        // Send the translated response in the required format
         return res.json({
             arabic_translation: arabicTranslation.arabic_translation,
             translation_notes: arabicTranslation.translation_notes || ["No additional notes provided."]
@@ -119,4 +122,3 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
 });
-
