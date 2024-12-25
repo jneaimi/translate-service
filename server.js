@@ -21,7 +21,11 @@ app.use(basicAuth({
         [process.env.BASIC_AUTH_USERNAME]: process.env.BASIC_AUTH_PASSWORD
     },
     challenge: true,
-    realm: 'Translation Service'
+    realm: 'Translation Service',
+    unauthorizedResponse: (req) => {
+        console.error('Unauthorized access attempt:', req.headers.authorization); // Log unauthorized attempts
+        return 'Unauthorized';
+    }
 }));
 
 // Translation endpoint
