@@ -31,15 +31,18 @@ app.use(basicAuth({
 // Translation endpoint
 app.post('/translate', async (req, res) => {
     try {
-        // Extract and handle `englishContent`
         let englishContent = req.body.englishContent;
 
-        // If `englishContent` is a string, attempt to parse it
+        // Handle improperly formatted stringified JSON
         if (typeof englishContent === 'string') {
             try {
-                englishContent = JSON.parse(englishContent); // Parse stringified JSON
+                // Attempt to fix and parse the improperly escaped JSON
+                englishContent = JSON.parse(englishContent.replace(/\\"/g, '"'));
             } catch (err) {
-                return res.status(400).json({ error: 'Invalid JSON format in englishContent', details: err.message });
+                return res.status(400).json({
+                    error: 'Invalid JSON format in englishContent',
+                    details: 'Unable to parse englishContent. Ensure the payload is valid.',
+                });
             }
         }
 
