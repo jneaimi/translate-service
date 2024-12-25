@@ -18,7 +18,7 @@ app.use(basicAuth({
 
 app.post('/translate', async (req, res) => {
     try {
-        // Extract content from the payload
+        // Extract the plain text content from the payload
         const { payload } = req.body;  // Directus flow payload
         const englishContent = payload.translations.update[0].content;  // Extract content from the update array
 
@@ -91,7 +91,7 @@ app.post('/translate', async (req, res) => {
             },
         });
 
-        // Extract the translated content and notes from OpenAI's response
+        // Extract the translated content from OpenAI's response
         const translatedContent = response.data.choices[0].message.content.trim();
         
         // Parse the translated content as JSON if necessary
@@ -119,3 +119,4 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
 });
+
