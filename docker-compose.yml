@@ -1,0 +1,16 @@
+services:
+  translate-service:
+    build: .
+    ports:
+      - "3000:3000"  # Expose port 3000
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BASIC_AUTH_USERNAME=${BASIC_AUTH_USERNAME}
+      - BASIC_AUTH_PASSWORD=${BASIC_AUTH_PASSWORD}
+    networks:
+      - coolify_network
+    restart: always
+
+networks:
+  coolify_network:
+    driver: bridge
