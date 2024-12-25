@@ -17,105 +17,76 @@ app.use(basicAuth({
 }));
 
 app.post('/translate', async (req, res) => {
-    try {
-        // Extract the plain text content from the payload (englishContent should be plain text)
-        const englishContent = req.body.englishContent;  // Get plain text directly from the body
+  try {
+      // Extract the englishContent field from the request body
+      let englishContent = req.body.englishContent;
 
-        if (!englishContent) {
-            return res.status(400).json({ error: 'englishContent is required' });
-        }
+      // Check if englishContent is a stringified JSON
+      if (typeof englishContent === 'string') {
+          try {
+              englishContent = JSON.parse(englishContent); // Parse the stringified JSON
+          } catch (parseError) {
+              return res.status(400).json({ error: 'Invalid JSON format in englishContent', details: parseError.message });
+          }
+      }
 
-        // Constructing the translation prompt
-        const prompt = `
-        You are an expert translator specializing in English to Arabic translations. Your task is to provide an accurate and natural-sounding translation while preserving the original meaning and tone of the text.
+      if (!englishContent) {
+          return res.status(400).json({ error: 'englishContent is required' });
+      }
 
-        Here is the English content to be translated:
+      // Constructing the translation prompt
+      const prompt = `
+      You are an expert translator specializing in English to Arabic translations. Your task is to provide an accurate and natural-sounding translation while preserving the original meaning and tone of the text.
 
-        <english_content>
-        ${englishContent}
-        </english_content>
+      Here is the English content to be translated:
 
-        Please follow these instructions carefully:
+      <english_content>
+      ${JSON.stringify(englishContent, null, 2)}
+      </english_content>
 
-        1. Read and comprehend the entire English content provided above.
+      Please follow these instructions carefully:
+      [instructions remain unchanged]
+      `;
 
-        2. Translate the content into Modern Standard Arabic (فصحى), ensuring grammatical correctness and appropriate vocabulary usage.
+      // Set up the request to OpenAI
+      const requestBody = {
+          model: "gpt-3.5-turbo",
+          messages: [{ role: "system", content: prompt }],
+          temperature: 0.5,
+          max_tokens: 1500,
+      };
 
-        3. Maintain the original formatting, including paragraphs, line breaks, and any special characters or punctuation marks.
-
-        4. Keep proper nouns, brand names, and technical terms in their original form.
-
-        5. For idiomatic expressions or culturally specific references, find an Arabic equivalent that conveys the same meaning. If no suitable equivalent exists, translate the meaning rather than providing a literal translation.
-
-        6. After completing the translation, review it to ensure accuracy, fluency, and naturalness in Arabic.
-
-        Your final output should preserve the **exact same JSON structure** but with the content translated into Arabic:
-
-        {
-          "arabic_translation": {
-            "title": "Title in Arabic",
-            "image_position": "left",
-            "translations": {
-              "create": [{
-                "languages_code": {
-                  "code": "en-US"
-                },
-                "headline": "Translated headline",
-                "content": "Translated content"
-              }],
-              "update": [],
-              "delete": []
-            }
+      // Send request to OpenAI for translation
+      const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
+          headers: {
+              'Authorization': `Bearer ${OPENAI_API_KEY}`,
+              'Content-Type': 'application/json',
           },
-          "translation_notes": [
-            "The word 'test' was translated to 'اختبار' which is the standard Arabic equivalent",
-            "Technical elements like 'image_position' and 'languages_code' were kept unchanged as they are system parameters",
-            "HTML tags were preserved in their original format",
-            "The structure of the JSON object was maintained while translating only the content strings"
-          ]
-        }
+      });
 
-        Remember to preserve the structure of the JSON and return the translation in the exact same format.
-        `;
+      // Extract translated content
+      const translatedContent = response.data.choices[0].message.content.trim();
 
-        // Set up the request to OpenAI
-        const requestBody = {
-            model: "gpt-3.5-turbo",  // You can switch to a more advanced model if necessary
-            messages: [{ role: "system", content: prompt }],
-            temperature: 0.5,
-            max_tokens: 1500,
-        };
+      // Attempt to parse the response content if it's in JSON format, otherwise treat it as a plain string
+      let arabicTranslation = {};
+      try {
+          arabicTranslation = JSON.parse(translatedContent);
+      } catch (err) {
+          console.error('Error parsing translated content:', err);
+          arabicTranslation = { arabic_translation: translatedContent, translation_notes: ["No additional notes provided."] };
+      }
 
-        // Send request to OpenAI for translation
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
-            headers: {
-                'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-        });
-
-        // Extract translated content
-        const translatedContent = response.data.choices[0].message.content.trim();
-
-        // Attempt to parse the response content if it's in JSON format, otherwise treat it as a plain string
-        let arabicTranslation = {};
-        try {
-            arabicTranslation = JSON.parse(translatedContent); // Parse the translation if it's a valid JSON
-        } catch (err) {
-            console.error('Error parsing translated content:', err);
-            arabicTranslation = { arabic_translation: translatedContent, translation_notes: ["No additional notes provided."] };
-        }
-
-        // Send the translated response in the required format
-        return res.json({
-            arabic_translation: arabicTranslation.arabic_translation,
-            translation_notes: arabicTranslation.translation_notes || ["No additional notes provided."]
-        });
-    } catch (error) {
-        console.error('Error during translation:', error);
-        return res.status(500).json({ error: 'Error during translation', details: error.message });
-    }
+      // Send the translated response in the required format
+      return res.json({
+          arabic_translation: arabicTranslation.arabic_translation,
+          translation_notes: arabicTranslation.translation_notes || ["No additional notes provided."]
+      });
+  } catch (error) {
+      console.error('Error during translation:', error);
+      return res.status(500).json({ error: 'Error during translation', details: error.message });
+  }
 });
+
 
 // Run server
 const port = process.env.PORT || 3000;
