@@ -1,13 +1,21 @@
 const express = require('express');
 const axios = require('axios');
 const basicAuth = require('express-basic-auth');
-const app = express();
-app.use(express.json());
+const bodyParser = require('body-parser');
 require('dotenv').config();
 
+const app = express();
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// Basic Authentication using .env for credentials
+// Middleware to parse JSON and handle raw bodies
+app.use(bodyParser.json({
+    strict: false, // Allow non-strict JSON parsing
+    verify: (req, res, buf) => {
+        req.rawBody = buf.toString(); // Save raw body for custom parsing if needed
+    }
+}));
+
+// Basic Authentication using .env credentials
 app.use(basicAuth({
     users: {
         [process.env.BASIC_AUTH_USERNAME]: process.env.BASIC_AUTH_PASSWORD
@@ -16,79 +24,79 @@ app.use(basicAuth({
     realm: 'Translation Service'
 }));
 
+// Translation endpoint
 app.post('/translate', async (req, res) => {
-  try {
-      // Extract the englishContent field from the request body
-      let englishContent = req.body.englishContent;
+    try {
+        // Extract and handle `englishContent`
+        let englishContent = req.body.englishContent;
 
-      // Check if englishContent is a stringified JSON
-      if (typeof englishContent === 'string') {
-          try {
-              englishContent = JSON.parse(englishContent); // Parse the stringified JSON
-          } catch (parseError) {
-              return res.status(400).json({ error: 'Invalid JSON format in englishContent', details: parseError.message });
-          }
-      }
+        // If `englishContent` is a string, attempt to parse it
+        if (typeof englishContent === 'string') {
+            try {
+                englishContent = JSON.parse(englishContent); // Parse stringified JSON
+            } catch (err) {
+                return res.status(400).json({ error: 'Invalid JSON format in englishContent', details: err.message });
+            }
+        }
 
-      if (!englishContent) {
-          return res.status(400).json({ error: 'englishContent is required' });
-      }
+        if (!englishContent) {
+            return res.status(400).json({ error: 'englishContent is required' });
+        }
 
-      // Constructing the translation prompt
-      const prompt = `
-      You are an expert translator specializing in English to Arabic translations. Your task is to provide an accurate and natural-sounding translation while preserving the original meaning and tone of the text.
+        // Constructing the translation prompt
+        const prompt = `
+        You are an expert translator specializing in English to Arabic translations.
+        Translate the following content into Modern Standard Arabic:
 
-      Here is the English content to be translated:
+        ${JSON.stringify(englishContent, null, 2)}
 
-      <english_content>
-      ${JSON.stringify(englishContent, null, 2)}
-      </english_content>
+        Return the result in this JSON format:
+        {
+          "arabic_translation": "Your Arabic translation here",
+          "translation_notes": ["Your notes here"]
+        }`;
 
-      Please follow these instructions carefully:
-      [instructions remain unchanged]
-      `;
+        // OpenAI API request body
+        const requestBody = {
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "system", content: prompt }],
+            temperature: 0.5,
+            max_tokens: 1500,
+        };
 
-      // Set up the request to OpenAI
-      const requestBody = {
-          model: "gpt-3.5-turbo",
-          messages: [{ role: "system", content: prompt }],
-          temperature: 0.5,
-          max_tokens: 1500,
-      };
+        // Send the request to OpenAI
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
+            headers: {
+                'Authorization': `Bearer ${OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+        });
 
-      // Send request to OpenAI for translation
-      const response = await axios.post('https://api.openai.com/v1/chat/completions', requestBody, {
-          headers: {
-              'Authorization': `Bearer ${OPENAI_API_KEY}`,
-              'Content-Type': 'application/json',
-          },
-      });
+        const translatedContent = response.data.choices[0].message.content.trim();
 
-      // Extract translated content
-      const translatedContent = response.data.choices[0].message.content.trim();
+        // Ensure the response is valid JSON
+        let arabicTranslation;
+        try {
+            arabicTranslation = JSON.parse(translatedContent);
+        } catch (err) {
+            arabicTranslation = { 
+                arabic_translation: translatedContent, 
+                translation_notes: ["No additional notes provided."] 
+            };
+        }
 
-      // Attempt to parse the response content if it's in JSON format, otherwise treat it as a plain string
-      let arabicTranslation = {};
-      try {
-          arabicTranslation = JSON.parse(translatedContent);
-      } catch (err) {
-          console.error('Error parsing translated content:', err);
-          arabicTranslation = { arabic_translation: translatedContent, translation_notes: ["No additional notes provided."] };
-      }
-
-      // Send the translated response in the required format
-      return res.json({
-          arabic_translation: arabicTranslation.arabic_translation,
-          translation_notes: arabicTranslation.translation_notes || ["No additional notes provided."]
-      });
-  } catch (error) {
-      console.error('Error during translation:', error);
-      return res.status(500).json({ error: 'Error during translation', details: error.message });
-  }
+        // Return the translation result
+        res.json({
+            arabic_translation: arabicTranslation.arabic_translation,
+            translation_notes: arabicTranslation.translation_notes || ["No additional notes provided."]
+        });
+    } catch (error) {
+        console.error('Error during translation:', error);
+        res.status(500).json({ error: 'Error during translation', details: error.message });
+    }
 });
 
-
-// Run server
+// Start the server
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
     console.log(`Server listening at http://localhost:${port}`);
